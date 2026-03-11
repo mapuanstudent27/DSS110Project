@@ -250,12 +250,21 @@ if analyze_btn:
     
     st.altair_chart(chart, use_container_width=True)
     
-    # --- EDUCATIONAL CHART EXPLANATION ---
-    st.caption("🔍 **XAI Diagnostic Output:** This graph uses **Explainable AI (XAI)** to reveal the 'internal logic' of the model. Each bar represents a specific attribute's weight in the final score. The taller the bar, the more that feature drove the system toward a Critical alert.")
+    # --- EDUCATIONAL CHART EXPLANATION & WEIGHTS ---
+    st.caption("""
+    **🔍 XAI Diagnostic Output & Feature Weights:** This graph uses **Explainable AI (XAI)** to reveal the 'internal logic' of the model. The taller the bar, the more that feature drove the system toward a Critical alert. 
+    
+    **General Threat Weighting Guidelines (Approximate Contribution):**
+    * **Failed Logins (~40% Weight):** The strongest indicator of automated Brute-Force or Dictionary attacks.
+    * **IP Reputation (~30% Weight):** Cross-references the source with known global threat intelligence blacklists.
+    * **Packet Size (~15% Weight):** Monitors for unusually heavy payloads, indicating potential data exfiltration or buffer overflow attempts.
+    * **Crypto Risk (~15% Weight):** Flags outdated (DES) or missing (Unknown) encryption protocols often used to evade security logs.
+    """)
 
 else:
     st.write("👈 Use the Security Console on the left to begin analysis.")
 
 # --- FOOTER ---
 st.markdown("<br><br><br><div style='text-align: center; color: gray; font-size: 10px;'>DSS110 | Tuazon, Alano, Alano, Dalisay, Nerizon</div>", unsafe_allow_html=True)
+
 
