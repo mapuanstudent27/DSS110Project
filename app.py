@@ -33,36 +33,22 @@ with st.sidebar:
     packet_size = st.number_input(
         "Packet Size (Bytes)", 
         min_value=0, 
-        max_value=1500, # <-- ADDED REAL-WORLD MTU LIMIT
+        max_value=1500,
         value=850,
-        help="Simulates the data payload size. Standard network MTU is 1500 bytes. Abnormally large or tiny packets can indicate buffer overflow attempts or fragmentation evasion."
+        help="Simulates the data payload size. Standard network MTU is 1500 bytes. Abnormally large packets can indicate buffer overflow attempts."
     )
-    protocol = st.selectbox(
-        "Protocol", 
-        ["TCP", "UDP", "ICMP"],
-        help="Communication protocol. TCP is standard web traffic. Attackers often exploit UDP for amplification attacks or ICMP for ping floods."
-    )
-    duration = st.number_input(
-        "Duration (Sec)", 
-        min_value=0.0, 
-        value=12.5,
-        help="How long the connection remained open. Extremely short durations (0-1s) with high data transfer often indicate automated port scanning."
-    )
+    protocol = st.selectbox("Protocol", ["TCP", "UDP", "ICMP"], help="Communication protocol.")
+    duration = st.number_input("Duration (Sec)", min_value=0.0, value=12.5)
     
     st.divider()
     
     st.subheader("Auth Logs")
-    logins = st.number_input(
-        "Total Attempts", 
-        min_value=0, 
-        value=3,
-        help="Total number of authentication requests. Adjusting this alongside failed logins helps the system calculate the error-rate ratio."
-    )
+    logins = st.number_input("Total Attempts", min_value=0, value=3)
     failed_logins = st.number_input(
         "Failed Logins", 
         min_value=0, 
         value=2,
-        help="Critical Metric: 0-2 is considered standard human error (typos). 3+ crosses the threshold into suspected automated Brute-Force or Dictionary attacks."
+        help="Critical Metric: 0-2 is human error. 3+ is suspected Brute-Force."
     )
     
     st.divider()
@@ -73,12 +59,12 @@ with st.sidebar:
         0.0, 
         1.0, 
         0.50,
-        help="Simulates global Threat Intelligence feeds (e.g., Cisco Talos). 0.0 is a highly trusted, known IP. 1.0 is a blacklisted botnet or malware command center."
+        help="0.0 is trusted. >0.60 is highly suspicious."
     )
     encryption = st.selectbox(
         "Encryption", 
         ["AES", "DES", "Unknown"],
-        help="AES: Modern, military-grade standard (Safe). DES: 1970s legacy standard, vulnerable to cracking (Warning). Unknown: Missing security logs or unencrypted, implies active evasion (High Risk)."
+        help="AES: Safe. DES: Warning. Unknown: High Risk."
     )
     
     analyze_btn = st.button("RUN SECURITY ANALYSIS")
@@ -107,9 +93,10 @@ if analyze_btn:
     processed_data = preprocessor.transform(incoming_dummies)
     raw_probability = model.predict_proba(processed_data)[0][1]
 
-    # --- MAGNITUDE SMOOTHING (BUSINESS LOGIC OVERRIDE) ---
+    # --- DOUBLE MAGNITUDE SMOOTHING (BUSINESS LOGIC OVERRIDE) ---
     probability = raw_probability
     
+    # Smooth the "Failed Logins" cliff (If IP is safe, scale down the panic of 3 logins)
     if ip_score <= 0.50: 
         if failed_logins == 3:
             probability = raw_probability * 0.55  
@@ -117,6 +104,15 @@ if analyze_btn:
             probability = raw_probability * 0.75  
         elif failed_logins == 5:
             probability = raw_probability * 0.85  
+            
+    # Smooth the "IP Reputation" cliff (If logins are safe, but IP crosses 0.60, ramp smoothly)
+    elif failed_logins <= 2 and ip_score > 0.60:
+        # Gradually scales the panic based on how close the IP is to 1.0
+        smoothing_factor = 0.60 + (ip_score * 0.40) 
+        probability = raw_probability * smoothing_factor
+
+    # Cap probability at 99.9% visually
+    probability = min(probability, 0.999)
 
     # --- THE "NUANCED" RESULTS ENGINE ---
     col_left, col_right = st.columns([1, 1])
@@ -146,27 +142,29 @@ if analyze_btn:
             st.write("Instead of a total block, the system recommends **MFA Escalation** or a **Temporary Cooldown**.")
             if failed_logins >= 3:
                 st.markdown("- *Reasoning:* While the IP is trusted, 3+ failures exceed normal human error margin.")
+            if 0.60 < ip_score < 0.80:
+                st.markdown("- *Reasoning:* Source IP has a deteriorating reputation. Proceed with caution.")
             if packet_size >= 1200:
-                st.markdown("- *Reasoning:* Unusually large packet payload detected. Monitoring for potential data exfiltration.")
+                st.markdown("- *Reasoning:* Unusually large packet payload detected.")
         
         elif risk_level == "CRITICAL":
             st.write("🔥 **ACTION TAKEN:** Connection Terminated.")
             st.write("The threat score exceeds the safety threshold for automated defense.")
-            if ip_score > 0.7:
+            if ip_score >= 0.80:
                 st.markdown("- *Reasoning:* Malicious IP origin detected in conjunction with anomalous traffic.")
             if failed_logins >= 5:
                 st.markdown("- *Reasoning:* Excessive authentication failures consistent with Brute-Force automation.")
             if encryption == "Unknown":
-                st.markdown("- *Reasoning:* Traffic is missing standard encryption logs, indicating potential evasion tactics.")
-            if packet_size >= 1200: # <-- ADDED PACKET SIZE REASONING
-                st.markdown("- *Reasoning:* Packet size approaches max MTU limit. High probability of heavy malicious payload delivery or buffer overflow attempt.")
+                st.markdown("- *Reasoning:* Traffic is missing standard encryption logs, indicating evasion tactics.")
+            if packet_size >= 1200: 
+                st.markdown("- *Reasoning:* Packet size approaches max MTU limit. High probability of heavy malicious payload delivery.")
 
     st.divider()
     st.subheader("Feature Contribution")
     
     # SMOOTHED CHART LOGIC
     scaled_login_risk = min(failed_logins / 6.0, 1.0) 
-    scaled_packet_risk = min(packet_size / 1500.0, 1.0) # Adjusted max scale to MTU
+    scaled_packet_risk = min(packet_size / 1500.0, 1.0) 
     
     # ENCRYPTION RISK LOGIC
     if encryption == "AES":
