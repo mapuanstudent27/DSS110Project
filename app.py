@@ -3,7 +3,16 @@ import pandas as pd
 import joblib
 
 # --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="Intrusion Detection", page_icon="🛑", layout="centered")
+st.set_page_config(page_title="SOC Dashboard", page_icon="🛡️", layout="wide")
+
+# --- CUSTOM CSS FOR PROFESSIONAL LOOK ---
+st.markdown("""
+    <style>
+    .main { background-color: #F8F9FA; }
+    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #007BFF; color: white; }
+    .sidebar .sidebar-content { background-color: #E9ECEF; }
+    </style>
+    """, unsafe_allow_html=True)
 
 # --- LOAD ASSETS ---
 @st.cache_resource 
@@ -14,45 +23,43 @@ def load_models():
 
 model, preprocessor = load_models()
 
-# --- MAIN UI ---
-st.title("🛑 NETWORK INTRUSION DETECTION")
-st.markdown("Monitor raw session characteristics. Hover over the **'?'** icons for parameter details.")
-st.divider()
+# --- SIDEBAR INPUTS (THE DEFENSE CONSOLE) ---
+st.sidebar.header("🛡️ SECURITY CONSOLE")
+st.sidebar.markdown("Adjust packet parameters to simulate network traffic.")
 
-# --- INPUT COLUMNS ---
-col1, col2 = st.columns(2)
-
-with col1:
-    packet_size = st.number_input("Network Packet Size (Bytes)", min_value=0, value=850, 
-                                  help="Size of the data packet. Standard MTU is up to 1500 bytes. Abnormal sizes may indicate payload fragmentation.")
-    protocol = st.selectbox("Protocol Type", ["TCP", "UDP", "ICMP"], 
-                            help="Communication protocol. ICMP is often exploited in ping floods.")
-    logins = st.number_input("Total Login Attempts", min_value=0, value=6, 
-                             help="Total authentication attempts during the session.")
-    duration = st.number_input("Session Duration (Seconds)", min_value=0.0, value=12.5, 
-                               help="Duration the connection remained open. 0 indicates an instantly killed connection.")
-
-with col2:
-    ip_score = st.slider("IP Reputation Score", 0.0, 1.0, 0.88, 
-                         help="Risk score based on global threat feeds. 0.0 is safe, 1.0 is highly malicious.")
-    failed_logins = st.number_input("Failed Logins", min_value=0, value=4, 
-                                    help="Unsuccessful authentication attempts. High numbers strongly indicate brute-force attacks.")
-    encryption = st.selectbox("Encryption Used", ["AES", "DES", "Unknown"], 
-                              help="Cryptographic protocol detected. 'Unknown' often implies missing/bypassed security logs.")
-
-st.divider()
-
-# --- PREDICTION LOGIC ---
-if st.button("EXECUTE TRAFFIC ANALYSIS", type="primary", use_container_width=True):
+with st.sidebar:
+    st.subheader("Session Details")
+    packet_size = st.number_input("Packet Size (Bytes)", min_value=0, value=850)
+    protocol = st.selectbox("Protocol", ["TCP", "UDP", "ICMP"])
+    duration = st.number_input("Duration (Sec)", min_value=0.0, value=12.5)
     
-    # Package inputs
+    st.divider()
+    
+    st.subheader("Auth Logs")
+    logins = st.number_input("Total Attempts", min_value=0, value=3)
+    failed_logins = st.number_input("Failed Logins", min_value=0, value=2)
+    
+    st.divider()
+    
+    st.subheader("Intel & Crypto")
+    ip_score = st.slider("IP Reputation Score", 0.0, 1.0, 0.50)
+    encryption = st.selectbox("Encryption", ["AES", "DES", "Unknown"])
+    
+    analyze_btn = st.button("RUN SECURITY ANALYSIS")
+
+# --- MAIN DISPLAY AREA (RESULTS) ---
+st.title("🛡️ Network Defense & Intrusion Analysis")
+st.info("System Status: Monitoring Live Traffic. Adjust parameters in the sidebar to test detection.")
+
+if analyze_btn:
+    # 1. Package inputs
     incoming_data = pd.DataFrame([{
         'network_packet_size': packet_size, 'protocol_type': protocol, 'login_attempts': logins,
         'session_duration': duration, 'encryption_used': encryption, 'ip_reputation_score': ip_score,
         'failed_logins': failed_logins, 'browser_type': 'Unknown', 'unusual_time_access': 1       
     }])
     
-    # Align dummy columns
+    # 2. Align dummy columns
     incoming_dummies = pd.get_dummies(incoming_data)
     expected_columns = preprocessor.feature_names_in_
     for col in expected_columns:
@@ -60,40 +67,54 @@ if st.button("EXECUTE TRAFFIC ANALYSIS", type="primary", use_container_width=Tru
             incoming_dummies[col] = 0
     incoming_dummies = incoming_dummies[expected_columns]
     
-    # Predict
+    # 3. Predict
     processed_data = preprocessor.transform(incoming_dummies)
     probability = model.predict_proba(processed_data)[0][1]
-    
-    # --- DYNAMIC RESULTS DISPLAY ---
-    st.subheader("SYSTEM OUTPUT")
-    st.progress(float(probability), text=f"Calculated Threat Probability: {probability * 100:.2f}%")
-    
-    if probability >= 0.65:
-        st.error("🚨 CRITICAL: INTRUSION DETECTED. CONNECTION TERMINATED.")
+
+    # --- THE "NUANCED" RESULTS ENGINE ---
+    col_left, col_right = st.columns([1, 1])
+
+    with col_left:
+        st.metric(label="Calculated Threat Probability", value=f"{probability * 100:.1f}%")
         
-        # Dynamic Reasoning Expander
-        with st.expander("VIEW THREAT DETAILS & REASONING", expanded=True):
-            st.write("Session terminated: Threat probability exceeds the **65% security threshold**.")
-            st.write("**Primary Risk Factors Identified:**")
-            if failed_logins > 1:
-                st.markdown(f"- **Brute-Force Indicator:** {failed_logins} failed login attempts detected.")
-            if ip_score > 0.5:
-                st.markdown(f"- **Malicious IP Origin:** IP Reputation Score ({ip_score}) matches known threat intelligence blacklists.")
-            if encryption == "Unknown":
-                st.markdown("- **Log Evasion:** Absence of standard AES/DES encryption data implies potential traffic obfuscation.")
-    else:
-        st.success("✅ TRAFFIC CLEARED. CONNECTION ESTABLISHED.")
-        with st.expander("VIEW CLEARANCE DETAILS"):
-            st.write("Session approved: Threat probability is below the **65% security threshold**.")
-            if ip_score < 0.5:
-                st.markdown("- **Trusted Origin:** IP address holds a safe reputation score.")
-            if failed_logins == 0:
-                st.markdown("- **Clean Authentication:** No failed login attempts detected.")
+        # Color-coded Status Indicator
+        if probability < 0.40:
+            st.success("STATUS: SECURE")
+            risk_level = "LOW"
+        elif 0.40 <= probability < 0.70:
+            st.warning("STATUS: SUSPICIOUS ACTIVITY")
+            risk_level = "MEDIUM"
+        else:
+            st.error("STATUS: INTRUSION DETECTED")
+            risk_level = "CRITICAL"
+
+    with col_right:
+        st.subheader(f"Risk Assessment: {risk_level}")
+        
+        # LOGIC FOR MAGNITUDE ADJUSTMENT (The Explanation)
+        if risk_level == "LOW":
+            st.write("Current traffic behavior matches baseline standard activity. No action required.")
+        
+        elif risk_level == "MEDIUM":
+            st.write("🚨 **PRE-EMPTIVE ALERT:** The system has detected a rise in failed auth attempts.")
+            st.write("Instead of a total block, the system recommends **MFA Escalation** or a **Temporary Cooldown**.")
+            if failed_logins >= 3:
+                st.markdown("- *Reasoning:* While the IP is trusted, 3+ failures exceed normal human error margin.")
+        
+        elif risk_level == "CRITICAL":
+            st.write("🔥 **ACTION TAKEN:** Connection Terminated.")
+            st.write("The threat score exceeds the safety threshold for automated defense.")
+            if ip_score > 0.7:
+                st.markdown("- *Reasoning:* Malicious IP origin detected in conjunction with auth failures.")
+
+    st.divider()
+    st.subheader("Feature Contribution")
+    st.bar_chart(pd.DataFrame({"Score": [failed_logins/10, ip_score, packet_size/1500]}, 
+                              index=["Failed Logins", "IP Risk", "Packet Size"]))
+
+else:
+    st.write("👈 Use the Security Console on the left to begin analysis.")
 
 # --- FOOTER ---
-st.markdown("---")
-st.markdown("<div style='text-align: center; color: #888888; font-size: 12px;'>", unsafe_allow_html=True)
-st.markdown("**DSS110 PROJECT CREATORS & CONTRIBUTORS:**")
-st.markdown("Tuazon, Joshua Aaron V. | Alano, Gwynelle Jazmine | Alano, Gwynette Janize | Dalisay, Katrina | Nerizon, Karla Ysabel")
-st.markdown("Data powered by the [Cybersecurity Intrusion Detection Dataset](https://www.kaggle.com/datasets/dnkumars/cybersecurity-intrusion-detection-dataset/data) via Kaggle.")
-st.markdown("</div>", unsafe_allow_html=True)
+st.markdown("<br><br><br><div style='text-align: center; color: gray; font-size: 10px;'>DSS110 | Tuazon, Alano, Alano, Dalisay, Nerizon</div>", unsafe_allow_html=True)
+
