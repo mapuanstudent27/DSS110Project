@@ -7,7 +7,6 @@ import altair as alt
 st.set_page_config(page_title="SOC Dashboard", page_icon="🛡️", layout="wide")
 
 # --- CUSTOM CSS FOR PROFESSIONAL LOOK ---
-# Importing Cisco-style geometric fonts (Montserrat) and tech fonts (Share Tech Mono)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;800&family=Share+Tech+Mono&display=swap');
@@ -67,20 +66,36 @@ with st.sidebar:
         min_value=0, 
         max_value=1500,
         value=850,
-        help="Simulates the data payload size. Standard network MTU is 1500 bytes. Abnormally large packets can indicate buffer overflow attempts."
+        help="Simulates payload size. Standard MTU is 1500. Large packets (>1200) can indicate heavy data exfiltration or buffer overflow attempts."
     )
-    protocol = st.selectbox("Protocol", ["TCP", "UDP", "ICMP"], help="Communication protocol.")
-    duration = st.number_input("Duration (Sec)", min_value=0.0, value=12.5)
+    protocol = st.selectbox(
+        "Protocol", 
+        ["TCP", "UDP", "ICMP"], 
+        help="Communication rulebook. TCP is normal web traffic. Attackers exploit UDP for fast, trackless attacks or ICMP for network mapping (ping sweeps)."
+    )
+    duration = st.number_input(
+        "Duration (Sec)", 
+        min_value=0.0, 
+        value=12.5,
+        help="How long the connection lasted. Extremely short durations (0-1s) often indicate automated bot activity or rapid port scanning."
+    )
     
     st.divider()
     
     st.subheader("Auth Logs")
-    logins = st.number_input("Total Attempts", min_value=0, value=3)
+    # Total Attempts must be calculated first so Failed Logins can use it as a limit
+    logins = st.number_input(
+        "Total Attempts", 
+        min_value=0, 
+        value=3,
+        help="Total authentication requests made. High totals combined with short durations indicate aggressive access attempts."
+    )
     failed_logins = st.number_input(
         "Failed Logins", 
         min_value=0, 
-        value=2,
-        help="Critical Metric: 0-2 is human error. 3+ is suspected Brute-Force."
+        max_value=int(logins), # <-- LOGIC FIX: Physically impossible to exceed Total Attempts
+        value=min(2, int(logins)), # Ensures default value doesn't break if Total Attempts starts low
+        help="Critical Metric. 0-2 is normal human error (typos). 3+ indicates suspected automated Brute-Force or Dictionary attacks."
     )
     
     st.divider()
@@ -91,12 +106,12 @@ with st.sidebar:
         0.0, 
         1.0, 
         0.50,
-        help="0.0 is trusted. >0.60 is highly suspicious."
+        help="Simulates global Threat Intelligence. 0.0 is a highly trusted IP. Scores >0.60 match known blacklists (botnets/malware)."
     )
     encryption = st.selectbox(
         "Encryption", 
         ["AES", "DES", "Unknown"],
-        help="AES: Safe. DES: Warning. Unknown: High Risk."
+        help="AES: Modern, military-grade standard. DES: 1970s legacy standard (vulnerable). Unknown: Missing logs, implying active evasion or obfuscation."
     )
     
     analyze_btn = st.button("RUN SECURITY ANALYSIS")
@@ -134,7 +149,7 @@ if analyze_btn:
             probability = raw_probability * 0.55  
         elif failed_logins == 4:
             probability = raw_probability * 0.75  
-        elif failed_logins == 5:
+        elif failed_logins >= 5:
             probability = raw_probability * 0.85  
             
     # Smooth the "IP Reputation" cliff (If logins are safe, but IP crosses 0.60, ramp smoothly)
