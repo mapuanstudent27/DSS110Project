@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import joblib
-import altair as alt 
+import altair as alt
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="SOC Dashboard", page_icon="🛡️", layout="wide")
@@ -30,21 +30,55 @@ st.sidebar.markdown("Adjust packet parameters to simulate network traffic.")
 
 with st.sidebar:
     st.subheader("Session Details")
-    packet_size = st.number_input("Packet Size (Bytes)", min_value=0, value=850)
-    protocol = st.selectbox("Protocol", ["TCP", "UDP", "ICMP"])
-    duration = st.number_input("Duration (Sec)", min_value=0.0, value=12.5)
+    packet_size = st.number_input(
+        "Packet Size (Bytes)", 
+        min_value=0, 
+        value=850,
+        help="Simulates the data payload size. Standard network MTU is 1500 bytes. Abnormally large or tiny packets can indicate buffer overflow attempts or fragmentation evasion."
+    )
+    protocol = st.selectbox(
+        "Protocol", 
+        ["TCP", "UDP", "ICMP"],
+        help="Communication protocol. TCP is standard web traffic. Attackers often exploit UDP for amplification attacks or ICMP for ping floods."
+    )
+    duration = st.number_input(
+        "Duration (Sec)", 
+        min_value=0.0, 
+        value=12.5,
+        help="How long the connection remained open. Extremely short durations (0-1s) with high data transfer often indicate automated port scanning."
+    )
     
     st.divider()
     
     st.subheader("Auth Logs")
-    logins = st.number_input("Total Attempts", min_value=0, value=3)
-    failed_logins = st.number_input("Failed Logins", min_value=0, value=2)
+    logins = st.number_input(
+        "Total Attempts", 
+        min_value=0, 
+        value=3,
+        help="Total number of authentication requests. Adjusting this alongside failed logins helps the system calculate the error-rate ratio."
+    )
+    failed_logins = st.number_input(
+        "Failed Logins", 
+        min_value=0, 
+        value=2,
+        help="Critical Metric: 0-2 is considered standard human error (typos). 3+ crosses the threshold into suspected automated Brute-Force or Dictionary attacks."
+    )
     
     st.divider()
     
     st.subheader("Intel & Crypto")
-    ip_score = st.slider("IP Reputation Score", 0.0, 1.0, 0.50)
-    encryption = st.selectbox("Encryption", ["AES", "DES", "Unknown"])
+    ip_score = st.slider(
+        "IP Reputation Score", 
+        0.0, 
+        1.0, 
+        0.50,
+        help="Simulates global Threat Intelligence feeds (e.g., Cisco Talos). 0.0 is a highly trusted, known IP. 1.0 is a blacklisted botnet or malware command center."
+    )
+    encryption = st.selectbox(
+        "Encryption", 
+        ["AES", "DES", "Unknown"],
+        help="AES: Modern, military-grade standard (Safe). DES: 1970s legacy standard, vulnerable to cracking (Warning). Unknown: Missing security logs or unencrypted, implies active evasion (High Risk)."
+    )
     
     analyze_btn = st.button("RUN SECURITY ANALYSIS")
 
@@ -119,6 +153,8 @@ if analyze_btn:
                 st.markdown("- *Reasoning:* Malicious IP origin detected in conjunction with auth failures.")
             elif failed_logins >= 5:
                 st.markdown("- *Reasoning:* Excessive authentication failures consistent with Brute-Force automation.")
+            if encryption == "Unknown":
+                st.markdown("- *Reasoning:* Traffic is missing standard encryption logs, indicating potential evasion tactics.")
 
     st.divider()
     st.subheader("Feature Contribution")
@@ -127,10 +163,18 @@ if analyze_btn:
     scaled_login_risk = min(failed_logins / 6.0, 1.0) 
     scaled_packet_risk = min(packet_size / 2000.0, 1.0) 
     
+    # ENCRYPTION RISK LOGIC
+    if encryption == "AES":
+        crypto_risk = 0.1  # Modern, safe
+    elif encryption == "DES":
+        crypto_risk = 0.5  # Outdated, moderate risk
+    else:
+        crypto_risk = 0.9  # Unknown/Obfuscated, high risk
+    
     # --- NEW FLAT TEXT CHART ---
     chart_data = pd.DataFrame({
-        "Feature": ["Failed Logins", "IP Risk", "Packet Size"],
-        "Score": [scaled_login_risk, ip_score, scaled_packet_risk]
+        "Feature": ["Failed Logins", "IP Risk", "Packet Size", "Crypto Risk"],
+        "Score": [scaled_login_risk, ip_score, scaled_packet_risk, crypto_risk]
     })
     
     # Altair lets us force the labelAngle to 0 (flat horizontally)
