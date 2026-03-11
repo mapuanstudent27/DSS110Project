@@ -33,6 +33,7 @@ with st.sidebar:
     packet_size = st.number_input(
         "Packet Size (Bytes)", 
         min_value=0, 
+        max_value=1500, # <-- ADDED REAL-WORLD MTU LIMIT
         value=850,
         help="Simulates the data payload size. Standard network MTU is 1500 bytes. Abnormally large or tiny packets can indicate buffer overflow attempts or fragmentation evasion."
     )
@@ -141,27 +142,31 @@ if analyze_btn:
             st.write("Current traffic behavior matches baseline standard activity. No action required.")
         
         elif risk_level == "MEDIUM":
-            st.write("🚨 **PRE-EMPTIVE ALERT:** The system has detected a rise in failed auth attempts.")
+            st.write("🚨 **PRE-EMPTIVE ALERT:** The system has detected anomalous activity.")
             st.write("Instead of a total block, the system recommends **MFA Escalation** or a **Temporary Cooldown**.")
             if failed_logins >= 3:
                 st.markdown("- *Reasoning:* While the IP is trusted, 3+ failures exceed normal human error margin.")
+            if packet_size >= 1200:
+                st.markdown("- *Reasoning:* Unusually large packet payload detected. Monitoring for potential data exfiltration.")
         
         elif risk_level == "CRITICAL":
             st.write("🔥 **ACTION TAKEN:** Connection Terminated.")
             st.write("The threat score exceeds the safety threshold for automated defense.")
             if ip_score > 0.7:
-                st.markdown("- *Reasoning:* Malicious IP origin detected in conjunction with auth failures.")
-            elif failed_logins >= 5:
+                st.markdown("- *Reasoning:* Malicious IP origin detected in conjunction with anomalous traffic.")
+            if failed_logins >= 5:
                 st.markdown("- *Reasoning:* Excessive authentication failures consistent with Brute-Force automation.")
             if encryption == "Unknown":
                 st.markdown("- *Reasoning:* Traffic is missing standard encryption logs, indicating potential evasion tactics.")
+            if packet_size >= 1200: # <-- ADDED PACKET SIZE REASONING
+                st.markdown("- *Reasoning:* Packet size approaches max MTU limit. High probability of heavy malicious payload delivery or buffer overflow attempt.")
 
     st.divider()
     st.subheader("Feature Contribution")
     
     # SMOOTHED CHART LOGIC
     scaled_login_risk = min(failed_logins / 6.0, 1.0) 
-    scaled_packet_risk = min(packet_size / 2000.0, 1.0) 
+    scaled_packet_risk = min(packet_size / 1500.0, 1.0) # Adjusted max scale to MTU
     
     # ENCRYPTION RISK LOGIC
     if encryption == "AES":
@@ -177,7 +182,6 @@ if analyze_btn:
         "Score": [scaled_login_risk, ip_score, scaled_packet_risk, crypto_risk]
     })
     
-    # Altair lets us force the labelAngle to 0 (flat horizontally)
     chart = alt.Chart(chart_data).mark_bar(color="#007BFF").encode(
         x=alt.X("Feature", sort=None, axis=alt.Axis(labelAngle=0, title=None)), 
         y=alt.Y("Score", axis=alt.Axis(title="Risk Contribution Level"))
