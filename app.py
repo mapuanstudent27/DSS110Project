@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import joblib
+import altair as alt 
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="SOC Dashboard", page_icon="🛡️", layout="wide")
@@ -67,9 +68,20 @@ if analyze_btn:
             incoming_dummies[col] = 0
     incoming_dummies = incoming_dummies[expected_columns]
     
-    # 3. Predict
+    # 3. Predict (Get Raw Probability)
     processed_data = preprocessor.transform(incoming_dummies)
-    probability = model.predict_proba(processed_data)[0][1]
+    raw_probability = model.predict_proba(processed_data)[0][1]
+
+    # --- MAGNITUDE SMOOTHING (BUSINESS LOGIC OVERRIDE) ---
+    probability = raw_probability
+    
+    if ip_score <= 0.50: 
+        if failed_logins == 3:
+            probability = raw_probability * 0.55  
+        elif failed_logins == 4:
+            probability = raw_probability * 0.75  
+        elif failed_logins == 5:
+            probability = raw_probability * 0.85  
 
     # --- THE "NUANCED" RESULTS ENGINE ---
     col_left, col_right = st.columns([1, 1])
@@ -81,7 +93,7 @@ if analyze_btn:
         if probability < 0.40:
             st.success("STATUS: SECURE")
             risk_level = "LOW"
-        elif 0.40 <= probability < 0.70:
+        elif 0.40 <= probability < 0.75: 
             st.warning("STATUS: SUSPICIOUS ACTIVITY")
             risk_level = "MEDIUM"
         else:
@@ -91,7 +103,6 @@ if analyze_btn:
     with col_right:
         st.subheader(f"Risk Assessment: {risk_level}")
         
-        # LOGIC FOR MAGNITUDE ADJUSTMENT (The Explanation)
         if risk_level == "LOW":
             st.write("Current traffic behavior matches baseline standard activity. No action required.")
         
@@ -106,15 +117,32 @@ if analyze_btn:
             st.write("The threat score exceeds the safety threshold for automated defense.")
             if ip_score > 0.7:
                 st.markdown("- *Reasoning:* Malicious IP origin detected in conjunction with auth failures.")
+            elif failed_logins >= 5:
+                st.markdown("- *Reasoning:* Excessive authentication failures consistent with Brute-Force automation.")
 
     st.divider()
     st.subheader("Feature Contribution")
-    st.bar_chart(pd.DataFrame({"Score": [failed_logins/10, ip_score, packet_size/1500]}, 
-                              index=["Failed Logins", "IP Risk", "Packet Size"]))
+    
+    # SMOOTHED CHART LOGIC
+    scaled_login_risk = min(failed_logins / 6.0, 1.0) 
+    scaled_packet_risk = min(packet_size / 2000.0, 1.0) 
+    
+    # --- NEW FLAT TEXT CHART ---
+    chart_data = pd.DataFrame({
+        "Feature": ["Failed Logins", "IP Risk", "Packet Size"],
+        "Score": [scaled_login_risk, ip_score, scaled_packet_risk]
+    })
+    
+    # Altair lets us force the labelAngle to 0 (flat horizontally)
+    chart = alt.Chart(chart_data).mark_bar(color="#007BFF").encode(
+        x=alt.X("Feature", sort=None, axis=alt.Axis(labelAngle=0, title=None)), 
+        y=alt.Y("Score", axis=alt.Axis(title="Risk Contribution Level"))
+    ).properties(height=250)
+    
+    st.altair_chart(chart, use_container_width=True)
 
 else:
     st.write("👈 Use the Security Console on the left to begin analysis.")
 
 # --- FOOTER ---
 st.markdown("<br><br><br><div style='text-align: center; color: gray; font-size: 10px;'>DSS110 | Tuazon, Alano, Alano, Dalisay, Nerizon</div>", unsafe_allow_html=True)
-
