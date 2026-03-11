@@ -7,11 +7,43 @@ import altair as alt
 st.set_page_config(page_title="SOC Dashboard", page_icon="🛡️", layout="wide")
 
 # --- CUSTOM CSS FOR PROFESSIONAL LOOK ---
+# Importing Cisco-style geometric fonts (Montserrat) and tech fonts (Share Tech Mono)
 st.markdown("""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;800&family=Share+Tech+Mono&display=swap');
+
+    /* Apply clean, professional font globally */
+    html, body, p, div, h1, h2, h3, h4, h5, h6, li, span, label {
+        font-family: 'Montserrat', sans-serif;
+    }
+    
+    /* Main Backgrounds */
     .main { background-color: #F8F9FA; }
-    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #007BFF; color: white; }
     .sidebar .sidebar-content { background-color: #E9ECEF; }
+
+    /* Action Button */
+    .stButton>button { 
+        width: 100%; 
+        border-radius: 5px; 
+        height: 3em; 
+        background-color: #007BFF; 
+        color: white; 
+        font-weight: 700;
+        letter-spacing: 1px;
+    }
+    
+    /* Make the main title look like a tech hardware logo */
+    h1 {
+        font-weight: 800 !important;
+        letter-spacing: -1px;
+        color: #003366 !important;
+    }
+    
+    /* Make the threat percentage look like a terminal readout */
+    [data-testid="stMetricValue"] {
+        font-family: 'Share Tech Mono', monospace !important;
+        color: #111111;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -107,14 +139,25 @@ if analyze_btn:
             
     # Smooth the "IP Reputation" cliff (If logins are safe, but IP crosses 0.60, ramp smoothly)
     elif failed_logins <= 2 and ip_score > 0.60:
-        # Gradually scales the panic based on how close the IP is to 1.0
         smoothing_factor = 0.60 + (ip_score * 0.40) 
         probability = raw_probability * smoothing_factor
 
     # Cap probability at 99.9% visually
     probability = min(probability, 0.999)
 
-    # --- THE "NUANCED" RESULTS ENGINE ---
+    # --- UNIFIED REASONING ENGINE ---
+    # We collect all the red flags independently so they all show up when triggered
+    risk_factors = []
+    if failed_logins >= 3:
+        risk_factors.append(f"**Auth Failure:** {failed_logins} failed attempts detected.")
+    if ip_score > 0.60:
+        risk_factors.append("**Malicious Origin:** Source IP matched global threat intelligence blacklists.")
+    if encryption == "Unknown":
+        risk_factors.append("**Evasion Tactics:** Traffic is missing standard encryption logs.")
+    if packet_size >= 1200: 
+        risk_factors.append("**Payload Anomaly:** Packet size approaches max MTU limit. High probability of heavy payload delivery.")
+
+    # --- THE "NUANCED" RESULTS DISPLAY ---
     col_left, col_right = st.columns([1, 1])
 
     with col_left:
@@ -136,28 +179,25 @@ if analyze_btn:
         
         if risk_level == "LOW":
             st.write("Current traffic behavior matches baseline standard activity. No action required.")
+            st.markdown("**Validation Checks Passed:**")
+            if failed_logins < 3: st.markdown("- Authentication error rates within normal human limits.")
+            if ip_score <= 0.60: st.markdown("- Source IP holds a trusted reputation score.")
+            if encryption != "Unknown": st.markdown(f"- Standard {encryption} encryption protocols verified.")
+            if packet_size < 1200: st.markdown("- Payload size well within standard MTU limits.")
         
         elif risk_level == "MEDIUM":
             st.write("🚨 **PRE-EMPTIVE ALERT:** The system has detected anomalous activity.")
             st.write("Instead of a total block, the system recommends **MFA Escalation** or a **Temporary Cooldown**.")
-            if failed_logins >= 3:
-                st.markdown("- *Reasoning:* While the IP is trusted, 3+ failures exceed normal human error margin.")
-            if 0.60 < ip_score < 0.80:
-                st.markdown("- *Reasoning:* Source IP has a deteriorating reputation. Proceed with caution.")
-            if packet_size >= 1200:
-                st.markdown("- *Reasoning:* Unusually large packet payload detected.")
+            st.markdown("**Detected Risk Factors:**")
+            for factor in risk_factors:
+                st.markdown(f"- {factor}")
         
         elif risk_level == "CRITICAL":
-            st.write("🔥 **ACTION TAKEN:** Connection Terminated.")
+            st.write("❌ **ACTION TAKEN:** Connection Terminated.")
             st.write("The threat score exceeds the safety threshold for automated defense.")
-            if ip_score >= 0.80:
-                st.markdown("- *Reasoning:* Malicious IP origin detected in conjunction with anomalous traffic.")
-            if failed_logins >= 5:
-                st.markdown("- *Reasoning:* Excessive authentication failures consistent with Brute-Force automation.")
-            if encryption == "Unknown":
-                st.markdown("- *Reasoning:* Traffic is missing standard encryption logs, indicating evasion tactics.")
-            if packet_size >= 1200: 
-                st.markdown("- *Reasoning:* Packet size approaches max MTU limit. High probability of heavy malicious payload delivery.")
+            st.markdown("**Detected Risk Factors:**")
+            for factor in risk_factors:
+                st.markdown(f"- {factor}")
 
     st.divider()
     st.subheader("Feature Contribution")
