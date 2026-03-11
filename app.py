@@ -251,10 +251,11 @@ if analyze_btn:
     st.altair_chart(chart, use_container_width=True)
     
     # --- EDUCATIONAL CHART EXPLANATION ---
-    st.caption("🔍 **Why is this a threat?** This dashboard uses **Explainable AI** to show the "Why" behind the score. Think of each bar as a witness testifying against the packet. If IP Risk is high, the AI is worried about where the packet came from. If all bars are low, the AI sees nothing but standard traffic. The taller the bar, the more suspicious that specific feature looks to the AI.")
+    st.caption("🔍 **XAI Diagnostic Output:** This graph uses **Explainable AI (XAI)** to reveal the 'internal logic' of the model. Each bar represents a specific attribute's weight in the final score. The taller the bar, the more that feature drove the system toward a Critical alert.")
 
 else:
     st.write("👈 Use the Security Console on the left to begin analysis.")
 
 # --- FOOTER ---
 st.markdown("<br><br><br><div style='text-align: center; color: gray; font-size: 10px;'>DSS110 | Tuazon, Alano, Alano, Dalisay, Nerizon</div>", unsafe_allow_html=True)
+
