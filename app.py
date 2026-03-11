@@ -93,7 +93,7 @@ with st.sidebar:
     failed_logins = st.number_input(
         "Failed Logins", 
         min_value=0, 
-        max_value=int(logins), # <-- LOGIC FIX: Physically impossible to exceed Total Attempts
+        max_value=int(logins) if int(logins) > 0 else 0, # <-- LOGIC FIX: Physically impossible to exceed Total Attempts
         value=min(2, int(logins)), # Ensures default value doesn't break if Total Attempts starts low
         help="Critical Metric. 0-2 is normal human error (typos). 3+ indicates suspected automated Brute-Force or Dictionary attacks."
     )
@@ -199,6 +199,10 @@ if analyze_btn:
             if ip_score <= 0.60: st.markdown("- Source IP holds a trusted reputation score.")
             if encryption != "Unknown": st.markdown(f"- Standard {encryption} encryption protocols verified.")
             if packet_size < 1200: st.markdown("- Payload size well within standard MTU limits.")
+            
+            # --- SAFE PAYLOAD EXPLANATION ---
+            if packet_size >= 1200:
+                st.info("ℹ️ **Informational:** Large packet size detected. While this is normal for safe file transfers or video streaming, it is actively monitored by the system for payload anomalies.")
         
         elif risk_level == "MEDIUM":
             st.write("🚨 **PRE-EMPTIVE ALERT:** The system has detected anomalous activity.")
@@ -206,6 +210,10 @@ if analyze_btn:
             st.markdown("**Detected Risk Factors:**")
             for factor in risk_factors:
                 st.markdown(f"- {factor}")
+                
+            # --- SAFE PAYLOAD EXPLANATION ---
+            if packet_size >= 1200:
+                st.info("ℹ️ **Informational:** A large packet size was logged. This may just be a standard file transfer, but combined with other anomalies, it warrants monitoring.")
         
         elif risk_level == "CRITICAL":
             st.write("❌ **ACTION TAKEN:** Connection Terminated.")
@@ -241,6 +249,9 @@ if analyze_btn:
     ).properties(height=250)
     
     st.altair_chart(chart, use_container_width=True)
+    
+    # --- EDUCATIONAL CHART EXPLANATION ---
+    st.caption("🔍 **Why is this a threat?** This dashboard uses **Explainable AI** to show the "Why" behind the score. Think of each bar as a witness testifying against the packet. If IP Risk is high, the AI is worried about where the packet came from. If all bars are low, the AI sees nothing but standard traffic. The taller the bar, the more suspicious that specific feature looks to the AI.")
 
 else:
     st.write("👈 Use the Security Console on the left to begin analysis.")
