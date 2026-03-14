@@ -136,26 +136,23 @@ if analyze_btn:
             incoming_dummies[col] = 0
     incoming_dummies = incoming_dummies[expected_columns]
     
-    # 3. Predict (Get Raw Probability)
+    # 3. Predict (Get Raw Probability from the AI)
     processed_data = preprocessor.transform(incoming_dummies)
     raw_probability = model.predict_proba(processed_data)[0][1]
 
-    # --- DOUBLE MAGNITUDE SMOOTHING (BUSINESS LOGIC OVERRIDE) ---
-    probability = raw_probability
+    # --- HYBRID ENSEMBLE SCALING (AI + DOMAIN LOGIC) ---
+    # We calculate the precise feature risks (0.0 to 1.0 scale)
+    login_risk = min(failed_logins / 5.0, 1.0) # 5 failures is the hard 100% line for this weight
+    ip_risk = ip_score                         # Already on a 0.0 to 1.0 scale
+    packet_risk = min(packet_size / 1500.0, 1.0) # Scales smoothly up to MTU limit
+    crypto_risk = 0.1 if encryption == "AES" else (0.5 if encryption == "DES" else 0.9)
     
-    # Smooth the "Failed Logins" cliff (If IP is safe, scale down the panic of 3 logins)
-    if ip_score <= 0.50: 
-        if failed_logins == 3:
-            probability = raw_probability * 0.55  
-        elif failed_logins == 4:
-            probability = raw_probability * 0.75  
-        elif failed_logins >= 5:
-            probability = raw_probability * 0.85  
-            
-    # Smooth the "IP Reputation" cliff (If logins are safe, but IP crosses 0.60, ramp smoothly)
-    elif failed_logins <= 2 and ip_score > 0.60:
-        smoothing_factor = 0.60 + (ip_score * 0.40) 
-        probability = raw_probability * smoothing_factor
+    # We calculate a strict Heuristic Score based on the 40/30/15/15 weights
+    heuristic_score = (login_risk * 0.40) + (ip_risk * 0.30) + (packet_risk * 0.15) + (crypto_risk * 0.15)
+    
+    # We blend the AI's pattern recognition (50%) with our strict IT math (50%)
+    # This completely destroys the "dataset cliffs" and creates a perfect scaling curve
+    probability = (raw_probability * 0.50) + (heuristic_score * 0.50)
 
     # Cap probability at 99.9% visually
     probability = min(probability, 0.999)
@@ -225,22 +222,11 @@ if analyze_btn:
     st.divider()
     st.subheader("Feature Contribution")
     
-    # SMOOTHED CHART LOGIC
-    scaled_login_risk = min(failed_logins / 6.0, 1.0) 
-    scaled_packet_risk = min(packet_size / 1500.0, 1.0) 
-    
-    # ENCRYPTION RISK LOGIC
-    if encryption == "AES":
-        crypto_risk = 0.1  # Modern, safe
-    elif encryption == "DES":
-        crypto_risk = 0.5  # Outdated, moderate risk
-    else:
-        crypto_risk = 0.9  # Unknown/Obfuscated, high risk
-    
     # --- NEW FLAT TEXT CHART ---
+    # We use the exact same logic variables from our Heuristic Score so the chart perfectly matches the math!
     chart_data = pd.DataFrame({
         "Feature": ["Failed Logins", "IP Risk", "Packet Size", "Crypto Risk"],
-        "Score": [scaled_login_risk, ip_score, scaled_packet_risk, crypto_risk]
+        "Score": [login_risk, ip_risk, packet_risk, crypto_risk]
     })
     
     chart = alt.Chart(chart_data).mark_bar(color="#007BFF").encode(
@@ -266,5 +252,3 @@ else:
 
 # --- FOOTER ---
 st.markdown("<br><br><br><div style='text-align: center; color: gray; font-size: 10px;'>DSS110 | Tuazon, Alano, Alano, Dalisay, Nerizon</div>", unsafe_allow_html=True)
-
-
